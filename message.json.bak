@@ -1,0 +1,12 @@
+{
+"Type":"Notification",
+"MessageId":"23a16950-8e77-5184-a6fa-25935ae67d01",
+"TopicArn":"arn:aws:sns:ap-southeast-2:586541096325:worker2-QueueTopic-15OLG0VF3W95H",
+"Subject":"AWSCloudFormationcustomresourcerequest",
+"Message":"{\"RequestType\":\"Create\",\"TopicArn\":\"arn:aws:sns:ap-southeast-2:586541096325:worker2-QueueTopic-15OLG0VF3W95H\",\"ResponseURL\":\"https://cloudformation-custom-resource-response-apsoutheast2.s3-ap-southeast-2.amazonaws.com/arn%3Aaws%3Acloudformation%3Aap-southeast-2%3A586541096325%3Astack/worker2/46daaa00-5b34-11e4-94b1-506726f6a39a%7CEIPAttach%7C0ebfae18-40f2-4635-9383-9c48e71e3ba6?AWSAccessKeyId=AKIAIHAPE667K7RJ3ENQ&Expires=1414131313&Signature=3tHy0LdG%2B7U%2BjGlJhCTVdxBpfiw%3D\",\"StackId\":\"arn:aws:cloudformation:ap-southeast-2:586541096325:stack/worker2/46daaa00-5b34-11e4-94b1-506726f6a39a\",\"RequestId\":\"0ebfae18-40f2-4635-9383-9c48e71e3ba6\",\"LogicalResourceId\":\"EIPAttach\",\"ResourceType\":\"Custom::lokerd\",\"ResourceProperties\":{\"ServiceToken\":\"arn:aws:sns:ap-southeast-2:586541096325:worker2-QueueTopic-15OLG0VF3W95H\",\"Attach\":\"false\"}}",
+"Timestamp":"2014-10-24T04:15:13.488Z",
+"SignatureVersion":"1",
+"Signature":"zS8asuq66s6au14nExWHC5Jj7ZGoJFUsTX5vfLOBF0PWbMWhNLL7KyHGAljFKWklEH3buS+1v81Tri09CutVrWKtAUyhDPz9nchKHU8YHIOOT7NN/lpFbV7fymAOBYZB1LrfeKcBeXfVGLBjzcV4BJAmUs6Ae4yLwkDUwFZ8MPYbeOJ4Jt80uZ2FJYDqwTgfA1K+xMsSEMsUfD5XvgLBoJUuWc3FjIAmsG6FLinnPhndOcafXJcW2whseaQGbEgV1I3AYdWuu6LG9RZAd4w5gBG8TzMjQH/dBLgBMzZXR+KbSEeUCPyfuPPFILtCu6IVQPr0SNLOKLOav/qS800TtQ==",
+"SigningCertURL":"https://sns.ap-southeast-2.amazonaws.com/SimpleNotificationService-d6d679a1d18e95c2f9ffcf11f4f9e198.pem",
+"UnsubscribeURL":"https://sns.ap-southeast-2.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:ap-southeast-2:586541096325:worker2-QueueTopic-15OLG0VF3W95H:f7c19e43-d961-4eaa-9c7e-d97531af0a09"
+}

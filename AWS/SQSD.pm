@@ -2,8 +2,14 @@ package AWS::SQSD;
 
 use POSIX qw(setsid);
 use AWS::CLIWrapper;
+use LWP::UserAgent;
+use LWP::Protocol::https;
+use HTTP::Request::Common;
+use JSON;
 use strict;
 use warnings;
+
+use Data::Dumper;
 
 # Functions for the SQS Daemon
 # lokerd@amazon.com
@@ -13,9 +19,12 @@ use warnings;
 # AWS::SQSD->process()		: process queue message
 # AWS::SQSD->api_call()		: API call via AWS::CLIWrapper
 
+# Constants
 use constant {
 	REGION          => 'ap-southeast-2',
-	Q 	        => 'sme'
+	Q 	        => 'worker3-Queue-SZCNQRDGE5VS',
+	ALLOC		=> 'eipalloc-63b5a501',
+	TARGET		=> 'i-bc8f8d73'
 };
 
 # Debug		: debug(string)
@@ -30,13 +39,14 @@ sub debug {
 # Constructor 	: new({})
 # ARGS		: anonymous hash of constructor args - placeholder
 # RETURN	: blessed reference 
-# OBJECT	: $self->{_queue}  - name of SQS Queue	: CONSTANT
-# 		: $self->{_region} - AWS Region		: CONSTANT
-sub new {
+sub new 
+{
 	my ($class, $args) = @_;
 	my $self = {
 		queue => +Q,
 		region => +REGION,
+		eip_status => 'false',
+		eip_assoc => "",
 		args => $args
 	};
 	bless ($self,$class);
@@ -47,22 +57,25 @@ sub new {
 # Initialise 	: _init()
 # ARGS:		: NONE
 # RETURN:	: NONE
-# OBJECT	: $self->{_aws} - AWS::CLIWrapper object
+# SETS		: $self->{_aws} - AWS::CLIWrapper object
+# 		: $self->{_ua} - LWP object
 # 		: $self->{_q_url} - full URL of SQS Queue
 # 		  returned from &api_call(sqs,create-queue...') 
-sub _init {
+sub _init 
+{
 	my $self = shift;
 	my $res;
 	eval 
 	{
-		$self->{ _aws } = AWS::CLIWrapper->new(region => $self->{region});
+		$self->{_aws} = AWS::CLIWrapper->new(region => $self->{region});
+		$self->{_ua} = LWP::UserAgent->new();
 		$res = $self->api_call('sqs', 'create-queue', {
 				'queue-name' => $self->{queue}
 		});
 	}; 
 	if ($res) { $self->{'_q_url'} = $res->{QueueUrl} }
 	else { die $@ } 
-	$self->daemon();
+#	$self->daemon();
 	return $self;
 }   
 
@@ -70,8 +83,8 @@ sub _init {
 # ARGS 		: NONE
 # RETURN	: anonymous hash $message
 # 		: undef if no $message
-# OBJECT	: NONE
-sub get_message {
+sub get_message 
+{
 	my $self = shift;
 	my $message = $self->api_call('sqs', 'receive-message', {
 			'queue-url' => $self->{_q_url}
@@ -84,16 +97,93 @@ sub get_message {
 # ARGS		: $message - anonymous message hash
 # 		  returned by AWS::SQSD->get_message()  
 # RETURN	: NONE
-# OBJECT	: $self-{_q_url}    - full URL of SQS Queue
-# 		: $self->api_call() - API Worker
-sub process {
+sub process 
+{
 	my ($self, $message) = @_;
-	print "Processing $message->{MessageId}\n";
-	$self->api_call('sqs', 'delete-message', {
-			'queue-url' => $self->{_q_url},
-			'receipt-handle' => $message->{ReceiptHandle} 
+    	my $tmp = decode_json $message;
+	my $body = decode_json $tmp->{Message};
+	my $response_url = $body->{ResponseURL};
+
+print Dumper $body;
+	my $response = {
+		'RequestId' => $body->{RequestId},
+		'StackId' => $body->{StackId},
+		'LogicalResourceId' => $body->{LogicalResourceId}
+	};
+
+	if ( $body->{ResourceProperties}{Attach} eq $self->{eip_status} ) 
+	{
+		$response->{Status} = 'SUCCESS';
+		$response->{Data}{AttachmentStatus} = $self->{eip_status};
+		my $res = $self->s3_signal($response,$response_url);
+	} 
+	else
+	{
+		if ($self->{eip_status} eq 'false') 
+		{ 
+			my $message = $self->api_call('ec2', 'associate-address', {
+				'instance-id' => +TARGET,
+				'allocation-id' => +ALLOC
 			});
+			if($message->{AssociationId}) 
+			{
+				$self->{eip_status} = 'true';
+				$self->{eip_assoc} = $message->{AssociationId};
+				$response->{Status} = 'SUCCESS';
+				$response->{Data}{AttachmentStatus} = $self->{eip_status};
+				$self->s3_signal($response,$response_url);
+			} 
+			else 
+			{
+				$response->{Status} = 'FAILED';
+				$response->{Data}{AttachmentStatus} = $self->{eip_status};
+				$self->s3_signal($response,$response_url);
+			}
+
+		} 
+		else 
+		{
+			my $message = $self->api_call('ec2', 'disassociate-address', {
+				'instance-id' => +TARGET,
+				'assocation-id' => $self->{eip_assoc}
+			});
+			if($message->{return} eq 'true') 
+			{
+				$self->{eip_status} = 'false';
+				$self->{eip_assoc} = "";
+				$response->{Status} = 'SUCCESS';
+				$response->{Data}{AttachmentStatus} = $self->{eip_status};
+				$self->s3_signal($response,$response_url);
+			} 
+			else 
+			{
+				$response->{Status} = 'FAILED';
+				$response->{Data}{AttachmentStatus} = $self->{eip_status};
+				$self->s3_signal($response, $response_url);
+			}
+		}
+	}	
+				
+		
+	
+#	$self->api_call('sqs', 'delete-message', {
+#			'queue-url' => $self->{_q_url},
+#			'receipt-handle' => $message->{ReceiptHandle} 
+#			});
 	return;
+}
+
+sub s3_signal
+{
+	my ($self, $response, $response_url) = @_;
+	print Dumper $response;
+	my $json = encode_json($response);
+	my $req = POST $response_url;
+	$req->header( 'Content-Type' => 'application/json' );
+	$req->content( $json );
+	my $res = $self->{_ua}->request($req);
+	if ($res) { return }
+	else { return undef }
 }
 
 # API Worker	: api_call(str,str,{})
@@ -103,7 +193,6 @@ sub process {
 # 		  $params = { 'option' => '$argument', 'queue-url' => '$q' }
 # RETURN:	: $res - anonymous hash of the response
 # 		: undef if no $res
-# OBJECT	: $self-{_aws} - AWS::CLIWrapper object
 sub api_call {
 	my ($self, $service, $operation, $params) = @_;
 	my $res = $self->{_aws}->$service($operation, $params);
