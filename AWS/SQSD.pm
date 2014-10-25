@@ -75,7 +75,7 @@ sub _init
 	}; 
 	if ($res) { $self->{'_q_url'} = $res->{QueueUrl} }
 	else { die $@ } 
-#	$self->daemon();
+	$self->daemon();
 	return $self;
 }   
 
