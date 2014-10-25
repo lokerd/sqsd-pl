@@ -19,12 +19,12 @@ use Data::Dumper;
 # AWS::SQSD->process()		: process queue message
 # AWS::SQSD->api_call()		: API call via AWS::CLIWrapper
 
-# Constants
+# Regex placeholders
 use constant {
-	REGION          => 'ap-southeast-2',
-	Q 	        => 'worker3-Queue-SZCNQRDGE5VS',
-	ALLOC		=> 'eipalloc-63b5a501',
-	TARGET		=> 'i-bc8f8d73'
+	REGION          => '___region___',
+	Q 	        => '___queue___',
+	ALLOC		=> '___alloc___',
+	TARGET		=> '___target___'
 };
 
 # Debug		: debug(string)
@@ -49,7 +49,7 @@ sub new
 		eip_assoc => "",
 		args => $args
 	};
-	bless ($self,$class);
+	bless ($self, $class);
 	$self->_init;
 	return $self; 
 }
@@ -75,7 +75,7 @@ sub _init
 	}; 
 	if ($res) { $self->{'_q_url'} = $res->{QueueUrl} }
 	else { die $@ } 
-#	$self->daemon();
+	$self->daemon();
 	return $self;
 }   
 
@@ -89,7 +89,7 @@ sub get_message
 	my $message = $self->api_call('sqs', 'receive-message', {
 			'queue-url' => $self->{_q_url}
 	});
-	if ($message) { return $message }
+	if ( $message ) { return $message }
 	else { return undef }
 }
 
@@ -102,9 +102,7 @@ sub process
 	my ($self, $message) = @_;
     	my $tmp = decode_json $message;
 	my $body = decode_json $tmp->{Message};
-	my $response_url = $body->{ResponseURL};
 
-print Dumper $body;
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
@@ -112,34 +110,22 @@ print Dumper $body;
 	};
 
 	if ( $body->{ResourceProperties}{Attach} eq $self->{eip_status} ) 
-	{
-		$response->{Status} = 'SUCCESS';
-		$response->{Data}{AttachmentStatus} = $self->{eip_status};
-		my $res = $self->s3_signal($response,$response_url);
-	} 
+	{ $self->success($response,$body->{ResponseURL}) } 
 	else
 	{
-		if ($self->{eip_status} eq 'false') 
+		if ( $self->{eip_status} eq 'false' ) 
 		{ 
 			my $message = $self->api_call('ec2', 'associate-address', {
 				'instance-id' => +TARGET,
 				'allocation-id' => +ALLOC
 			});
-			if($message->{AssociationId}) 
+			if ( $message->{AssociationId} ) 
 			{
 				$self->{eip_status} = 'true';
 				$self->{eip_assoc} = $message->{AssociationId};
-				$response->{Status} = 'SUCCESS';
-				$response->{Data}{AttachmentStatus} = $self->{eip_status};
-				$self->s3_signal($response,$response_url);
+				$self->success($response,$body->{ResponseURL});
 			} 
-			else 
-			{
-				$response->{Status} = 'FAILED';
-				$response->{Data}{AttachmentStatus} = $self->{eip_status};
-				$self->s3_signal($response,$response_url);
-			}
-
+			else { $self->fail($response,$body->{ResponseURL}) }
 		} 
 		else 
 		{
@@ -147,20 +133,13 @@ print Dumper $body;
 				'instance-id' => +TARGET,
 				'assocation-id' => $self->{eip_assoc}
 			});
-			if($message->{return} eq 'true') 
+			if ( $message->{return} eq 'true' ) 
 			{
 				$self->{eip_status} = 'false';
 				$self->{eip_assoc} = "";
-				$response->{Status} = 'SUCCESS';
-				$response->{Data}{AttachmentStatus} = $self->{eip_status};
-				$self->s3_signal($response,$response_url);
+				$self->success($response, $body->{ResponseURL});
 			} 
-			else 
-			{
-				$response->{Status} = 'FAILED';
-				$response->{Data}{AttachmentStatus} = $self->{eip_status};
-				$self->s3_signal($response, $response_url);
-			}
+			else { $self->fail($response, $body->{ResponseURL}) }
 		}
 	}	
 				
@@ -171,6 +150,22 @@ print Dumper $body;
 #			'receipt-handle' => $message->{ReceiptHandle} 
 #			});
 	return;
+}
+
+sub success 
+{
+	my ($self, $response, $response_url) = @_;
+	$response->{Status} = 'SUCCESS';
+	$response->{Data}{AttachmentStatus} = $self->{eip_status};
+	$self->s3_signal($response,$response_url);
+}
+	
+sub fail 
+{
+	my ($self, $response, $response_url) = @_;
+	$response->{Status} = 'FAILED';
+	$response->{Data}{AttachmentStatus} = $self->{eip_status};
+	$self->s3_signal($response,$response_url);
 }
 
 sub s3_signal
@@ -212,13 +207,13 @@ sub api_call {
 # STDIN 	: DETACHED
 # STDOUT, STDERR: /var/log/sqsd{-error}.log
 sub daemon {
-	chdir '/'                 or die "Can't chdir to /: $!";
-	open STDIN, '/dev/null'   or die "Can't read /dev/null: $!";
+	chdir '/' or die "Can't chdir to /: $!";
+	open STDIN, '/dev/null' or die "Can't read /dev/null: $!";
 	open STDOUT, '>>/var/log/sqsd.log' or die "Can't write to /dev/null: $!";
 	open STDERR, '>>/var/log/sqsd-error.log' or die "Can't write to /dev/null: $!";
-	defined(my $pid = fork)   or die "Can't fork: $!";
+	defined(my $pid = fork) or die "Can't fork: $!";
 	exit if $pid;
-	setsid                    or die "Can't start a new session: $!";
+	setsid or die "Can't start a new session: $!";
 	umask 0;
 }
 
