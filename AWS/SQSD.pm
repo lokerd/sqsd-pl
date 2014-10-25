@@ -173,11 +173,12 @@ sub s3_signal
 	my ($self, $response, $response_url) = @_;
 	print Dumper $response;
 	my $json = encode_json($response);
+	print $json;
 	my $req = POST $response_url;
-	$req->header( 'Content-Type' => 'application/json' );
+	$req->header( 'Content-Type' => '' );
 	$req->content( $json );
 	my $res = $self->{_ua}->request($req);
-	if ($res) { return }
+	if ($res) { print Dumper $res and return }
 	else { return undef }
 }
 
