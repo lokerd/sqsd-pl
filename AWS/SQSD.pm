@@ -183,8 +183,8 @@ sub s3_signal
 	$req->header( 'Content-Type' => '' );
 	$req->content( $json );
 	my $res = $self->{_ua}->request($req);
-	if ($res->{_rc} eq '200') { return }
-	else { return undef }
+	if ($res->{_rc} eq '200') { print Dumper $res and return }
+	else { print Dumper $res and return undef }
 }
 
 # API Worker	: api_call(str,str,{})
