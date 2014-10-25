@@ -24,7 +24,7 @@ use constant {
 	REGION          => 'ap-southeast-2',
 	Q 	        => 'Test-Queue-Z76NU1TO25C4',
 	ALLOC		=> 'eipalloc-78332c1a',
-	TARGET		=> 'i-6fb009a0'
+	TARGET		=> '___target___'
 };
 
 # Debug		: debug(string)
@@ -75,7 +75,7 @@ sub _init
 	}; 
 	if ($res) { $self->{'_q_url'} = $res->{QueueUrl} }
 	else { die $@ } 
-#	$self->daemon();
+	$self->daemon();
 	return $self;
 }   
 
@@ -92,18 +92,6 @@ sub get_message
 	if ( $message ) { return $message }
 	else { return undef }
 }
-
-sub rm 
-{
-	my ($self,$handle) = @_;
-	my $res = $self->api_call('sqs', 'delete-message', {
-			'queue-url' => $self->{_q_url},
-			'receipt-handle' => $handle 
-	});
-	if ( $res ) { return $res }
-	else { return undef }
-}
-
 
 # MSG Processor	: process({})
 # ARGS		: $message - anonymous message hash
@@ -154,7 +142,13 @@ sub process
 			else { $self->fail($response, $body->{ResponseURL}) }
 		}
 	}	
-
+				
+		
+	
+#	$self->api_call('sqs', 'delete-message', {
+#			'queue-url' => $self->{_q_url},
+#			'receipt-handle' => $message->{ReceiptHandle} 
+#			});
 	return;
 }
 
@@ -177,12 +171,14 @@ sub fail
 sub s3_signal
 {
 	my ($self, $response, $response_url) = @_;
+	print Dumper $response;
 	my $json = encode_json($response);
-	my $req = PUT $response_url;
+	print $json;
+	my $req = POST $response_url;
 	$req->header( 'Content-Type' => '' );
 	$req->content( $json );
 	my $res = $self->{_ua}->request($req);
-	if ($res->{_rc} eq '200') { return }
+	if ($res) { print Dumper $res and return }
 	else { return undef }
 }
 
