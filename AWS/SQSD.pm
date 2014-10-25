@@ -118,7 +118,8 @@ sub process
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
-		'LogicalResourceId' => $body->{LogicalResourceId}
+		'LogicalResourceId' => $body->{LogicalResourceId},
+		'PhysicalResourceId' => 'lokerd'
 	};
 
 	if ( $body->{ResourceProperties}{Attach} eq $self->{eip_status} ) 
