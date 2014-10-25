@@ -21,10 +21,10 @@ use Data::Dumper;
 
 # Regex placeholders
 use constant {
-	REGION          => 'ap-southeast-2',
-	Q 	        => 'Test-Queue-Z76NU1TO25C4',
-	ALLOC		=> 'eipalloc-78332c1a',
-	TARGET		=> 'i-6fb009a0'
+	REGION      => '___region___',
+	Q 	        => '___queue___',
+	ALLOC		=> '___alloc___',
+	TARGET		=> '___target___'
 };
 
 # Debug		: debug(string)

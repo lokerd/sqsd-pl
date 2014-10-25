@@ -16,11 +16,10 @@ while (1)
 {
 	# Try pop a message off the queue
 	my $res = $sqsd->get_message();
-	print Dumper $res;
 	# Process it if we find one
         if(@{$res->{Messages}}[0]) {
-                $sqsd->process(@{$res->{Messages}}[0]->{Body});
-		$sqsd->rm(@{$res->{Messages}}[0]->{ReceiptHandle});
+            $sqsd->process(@{$res->{Messages}}[0]->{Body});
+		    $sqsd->rm(@{$res->{Messages}}[0]->{ReceiptHandle});
         }
 	# Time till we try again
 	sleep 20;
