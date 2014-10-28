@@ -11,6 +11,7 @@ use HTTP::Request::Common;
 use JSON;
 
 use Data::Dumper;
+
 # Functions for the SQS Daemon
 # lokerd@amazon.com
 
@@ -78,7 +79,7 @@ sub get_message
 	if ($message) { return $message } else { return undef }
 }
 
-# rm(str)
+# rm(str)       : delete message from SQS queue
 # ARGS 		: $handle - sqs message receipt handle
 # RETURN	: true if successful, undef otherwise
 sub rm 
@@ -91,6 +92,9 @@ sub rm
 	if ($res) { return $res } else { return undef }
 }
 
+# disassociate(): disassociate EIP from target
+# ARGS		: $response - anon hash containing respone
+# RETURN	: true for signal success, undef for signal or api call fail
 sub disassociate 
 {
 	my ($self, $response) = @_;
@@ -108,6 +112,9 @@ sub disassociate
 	if ($return) { return $return } else { return undef }
 }
 
+# associate()   : associate EIP to target
+# ARGS		: $response - anon hash containing respone
+# RETURN	: true for signal success, undef for signal or api call fail
 sub associate 
 {
 	my ($self, $response) = @_;
@@ -126,6 +133,10 @@ sub associate
 	if ($return) { return $return } else { return undef }
 }
 
+# message_decode()      : start response hash and decode SQS message
+# ARGS		        : $message - popped from SQS queue 
+# RETURN	        : $response - anon hash of response details
+#                       : $body - anon hash of message body
 sub message_decode 
 {
 	my ($self, $message) = @_;
@@ -141,15 +152,16 @@ sub message_decode
 	if ($response and $body) { return($response, $body) } else { return undef }
 }
 
-# process({})
-# ARGS		: $message - anonymous message hash
-# 		  returned by AWS::SQSD->get_message()  
-# RETURN	: true if successful or undef
+# process({})           : process stack notification
+# ARGS		        : $message - anonymous message hash
+# 		          returned by AWS::SQSD->get_message()  
+# RETURN	        : true if successful or undef
 sub process 
 {
 	my ($self, $message) = @_;
         my ($response, $body) = $self->message_decode($message);
         my $return = undef;
+        if ($body->{RequestType} eq 'Delete') { $body->{ResourceProperties}{Attach} = 'false' }
 	if ($body->{ResourceProperties}{Attach} eq $self->{eip_status}) 
 	{ $return = $self->s3_signal($response, 'SUCCESS', undef) } 
 	else
@@ -162,15 +174,15 @@ sub process
 	if ($return) { return $return } else { return undef }
 }
 
-# s3_signal({} str)
-# ARGS 		: $response - CF response anon hash
-#               : $response_url - from CF notification
-# RETURN	: true if rc 200, undef otherwise
+# s3_signal({} str)     : send encoded response hash to CF provided URL
+# ARGS 		        : $response - CF response anon hash
+#                       : $status - 'SUCCESS' or 'FAILED'
+#                       : $reason - only needed for 'FAILED'
+# RETURN	        : true if rc 200, undef otherwise
 sub s3_signal
 {
 	my ($self, $response, $status, $reason) = @_;
         if ($status eq 'FAILED') { $response->{Reason} = $reason }  
-	else { $response->{Data}{AttachmentStatus} = $self->{eip_status} }
 	$response->{Status} = $status;
 	my $json = encode_json($response);
         debug($json) if $self->{_debug} == 1;
@@ -182,12 +194,12 @@ sub s3_signal
 	if ($res->{_rc} eq '200') { return } else { return undef }
 }
 
-# api_call(str str {})
-# ARGS		: $service - aws cli service eg. [sqs,autoscaling,sns...]
-# 		: $operation - cli operation eg. [delete-message,create-queue,...]
-# 		: $params - anonymous hash of option/argument pairs
-# 		  $params = { 'option' => '$argument', 'queue-url' => '$q' }
-# RETURN	: $res - anonymous hash of the response or undef
+# api_call(str str {})  : AWS API call via AWS::CLIWrapper
+# ARGS		        : $service - aws cli service eg. [sqs,autoscaling,sns...]
+# 		        : $operation - cli operation eg. [delete-message,create-queue,...]
+# 		        : $params - anonymous hash of option/argument pairs
+# 		          $params = { 'option' => '$argument', 'queue-url' => '$q' }
+# RETURN	        : $res - anonymous hash of the response or undef
 sub api_call {
 	my ($self, $service, $operation, $params) = @_;
 	my $res = $self->{_aws}->$service($operation, $params);
@@ -200,10 +212,10 @@ sub api_call {
 	}
 }
 
-# daemon()
-# ARGS		: NONE
-# RETURN	: NONE
-# STDOUT, STDERR: /var/log/sqsd{-error}.log
+# daemon()              : daemonize process
+# ARGS		        : NONE
+# RETURN	        : NONE
+# STDOUT, STDERR        : /var/log/sqsd{-error}.log
 sub daemon {
 	chdir '/' or die "Can't chdir to /: $!";
 	open STDIN, '/dev/null' or die "Can't read /dev/null: $!";
