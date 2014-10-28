@@ -41,6 +41,7 @@ sub new
 		region => +REGION,
 		eip_status => 'false',
 		eip_assoc => "",
+		_debug => 1,
 		args => $args
 	};
 	bless($self, $class);
@@ -74,7 +75,7 @@ sub get_message
 	my $message = $self->api_call('sqs', 'receive-message', {
 			'queue-url' => $self->{queue_url}
 	});
-	if ($message) {return $message} else {return undef}
+	if ($message) { return $message } else { return undef }
 }
 
 # rm(str)
@@ -87,14 +88,13 @@ sub rm
 			'queue-url' => $self->{queue_url},
 			'receipt-handle' => $handle 
 	});
-	if ($res) {return $res} else {return undef}
+	if ($res) { return $res } else { return undef }
 }
 
 sub disassociate 
 {
 	my ($self, $response) = @_;
 	my $res = $self->api_call('ec2', 'disassociate-address', {
-		'instance-id' => +TARGET,
 		'association-id' => $self->{eip_assoc}
 	} );
         my $return = undef;
@@ -104,8 +104,8 @@ sub disassociate
 		$self->{eip_assoc} = "";
 		$return = $self->s3_signal($response, 'SUCCESS', undef);
 	} 
-	else {$return = $self->s3_signal($response, 'FAILURE', "disassociate-address failed")}
-	if ($return) {return $return} else {return undef}
+	else { $return = $self->s3_signal($response, 'FAILED', "disassociate-address failed") }
+	if ($return) { return $return } else { return undef }
 }
 
 sub associate 
@@ -122,8 +122,8 @@ sub associate
 		$self->{eip_assoc} = $res->{AssociationId};
 		$return = $self->s3_signal($response, 'SUCCESS', undef);
 	} 
-	else {$return = $self->s3_signal($response, 'FAILURE', "associate-address failed")}
-	if ($return) {return $return} else {return undef}
+	else { $return = $self->s3_signal($response, 'FAILED', "associate-address failed") }
+	if ($return) { return $return } else { return undef }
 }
 
 sub message_decode 
@@ -138,7 +138,7 @@ sub message_decode
 		'LogicalResourceId' => $body->{LogicalResourceId},
 		'PhysicalResourceId' => 'lokerd'
 	};
-	if ($response and $body) {return($response, $body)} else {return undef}
+	if ($response and $body) { return($response, $body) } else { return undef }
 }
 
 # process({})
@@ -151,14 +151,15 @@ sub process
         my ($response, $body) = $self->message_decode($message);
         my $return = undef;
 	if ($body->{ResourceProperties}{Attach} eq $self->{eip_status}) 
-	{$return = $self->s3_signal($response, 'SUCCESS', undef)} 
+	{ $return = $self->s3_signal($response, 'SUCCESS', undef) } 
 	else
 	{
 		if ($self->{eip_status} eq 'false') 
-		{$return = $self->associate($response)} 
-		else {$return = $self->disassociate($response)}
+		{ $return = $self->associate($response) } 
+		else 
+                { $return = $self->disassociate($response) }
 	}	
-	if ($return) {return $return} else {return undef}
+	if ($return) { return $return } else { return undef }
 }
 
 # s3_signal({} str)
@@ -168,15 +169,17 @@ sub process
 sub s3_signal
 {
 	my ($self, $response, $status, $reason) = @_;
-        if ($status eq 'FAILED') {$self->{Reason} = $reason};  
+        if ($status eq 'FAILED') { $response->{Reason} = $reason }  
+	else { $response->{Data}{AttachmentStatus} = $self->{eip_status} }
 	$response->{Status} = $status;
-	$response->{Data}{AttachmentStatus} = $self->{eip_status};
 	my $json = encode_json($response);
+        debug($json) if $self->{_debug} == 1;
 	my $req = PUT $self->{response_url};
 	$req->header('Content-Type' => '');
 	$req->content($json);
 	my $res = $self->{_ua}->request($req);
-	if ($res->{_rc} eq '200') {return} else {return undef}
+        debug($res) if $self->{_debug} == 1;
+	if ($res->{_rc} eq '200') { return } else { return undef }
 }
 
 # api_call(str str {})
@@ -188,7 +191,7 @@ sub s3_signal
 sub api_call {
 	my ($self, $service, $operation, $params) = @_;
 	my $res = $self->{_aws}->$service($operation, $params);
-	if ($res) {return $res}
+	if ($res) { return $res }
 	else 
 	{
 		warn $AWS::CLIWrapper::Error->{Code};
@@ -218,6 +221,7 @@ sub daemon {
 sub debug {
 	my $debug_string = shift;
 	printf("%.3f :: %-12s\n", time, $debug_string);
+        print Dumper $debug_string;
 }
 
 1;
