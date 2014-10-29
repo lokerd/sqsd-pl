@@ -43,7 +43,7 @@ sub new
 		eip_status => 'false',
 		eip_assoc => "",
 		_debug => 1,
-		_physical_id => 1,
+		_physical_id => "custom_1",
 		args => $args
 	};
 	bless($self, $class);
