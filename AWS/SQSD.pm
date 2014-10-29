@@ -120,9 +120,9 @@ sub associate
 {
 	my ($self, $type, $response_url, $response) = @_;
 	my $res = $self->api_call('ec2', 'associate-address', {
-		'instance-id' => +TARGET,
-		'allocation-id' => +ALLOC,
-		'allow_reassignment'   => $AWS::CLIWrapper::true
+		'instance-id' 		=> +TARGET,
+		'allocation-id' 	=> +ALLOC,
+		'allow_reassociation'   => $AWS::CLIWrapper::true
 	});
         my $return = undef;
 	if ($res->{AssociationId}) 
@@ -145,7 +145,7 @@ sub message_decode
 	my $tmp = decode_json $message; my $body = decode_json $tmp->{Message};
 	if ($body->{RequestType} eq 'Delete') { $attach = 'false' }
 	else { $attach = $body->{ResourceProperties}{Attach} }
-	$self->{_physical_id}++ if $body->{RequestType} =~ /Update|Delete/;
+	$self->{_physical_id} = ++$self->{_physical_id} if $body->{RequestType} =~ /Update|Delete/;
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
