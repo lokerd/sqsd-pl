@@ -43,12 +43,20 @@ sub new
 		eip_status => 'false',
 		eip_assoc => "",
 		_debug => 1,
-		_physical_id => "custom_1",
+		_physical_id => &id_gen(),
 		args => $args
 	};
 	bless($self, $class);
 	$self->_init();
 	return $self; 
+}
+
+sub id_gen
+{
+        my @chars = ("A".."Z", "a".."z");
+        my $string;
+        $string .= $chars[rand @chars] for 1..8;
+        return $string;
 }
 
 # _init()
@@ -145,7 +153,7 @@ sub message_decode
 	my $tmp = decode_json $message; my $body = decode_json $tmp->{Message};
 	if ($body->{RequestType} eq 'Delete') { $attach = 'false' }
 	else { $attach = $body->{ResourceProperties}{Attach} }
-	$self->{_physical_id} = ++$self->{_physical_id} if $body->{RequestType} =~ /Update|Delete/;
+	$self->{_physical_id} = &id_gen() if $body->{RequestType} =~ /Update|Delete/;
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
