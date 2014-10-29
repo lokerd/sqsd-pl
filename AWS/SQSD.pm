@@ -43,6 +43,7 @@ sub new
 		eip_status => 'false',
 		eip_assoc => "",
 		_debug => 1,
+		_physical_id => 1,
 		args => $args
 	};
 	bless($self, $class);
@@ -97,7 +98,7 @@ sub rm
 # RETURN	: true for signal success, undef for signal or api call fail
 sub disassociate 
 {
-	my ($self, $response) = @_;
+	my ($self, $type, $response_url, $response) = @_;
 	my $res = $self->api_call('ec2', 'disassociate-address', {
 		'association-id' => $self->{eip_assoc}
 	} );
@@ -106,9 +107,9 @@ sub disassociate
 	{
 		$self->{eip_status} = 'false';
 		$self->{eip_assoc} = "";
-		$return = $self->s3_signal($response, 'SUCCESS', undef);
+		$return = $self->s3_signal($type, $response_url, $response, 'SUCCESS', undef);
 	} 
-	else { $return = $self->s3_signal($response, 'FAILED', "disassociate-address failed") }
+	else { $return = $self->s3_signal($type, $response_url, $response, 'FAILED', "disassociate-address failed") }
 	if ($return) { return $return } else { return undef }
 }
 
@@ -117,19 +118,20 @@ sub disassociate
 # RETURN	: true for signal success, undef for signal or api call fail
 sub associate 
 {
-	my ($self, $response) = @_;
+	my ($self, $type, $response_url, $response) = @_;
 	my $res = $self->api_call('ec2', 'associate-address', {
 		'instance-id' => +TARGET,
-		'allocation-id' => +ALLOC
+		'allocation-id' => +ALLOC,
+		'allow_reassignment'   => $AWS::CLIWrapper::true
 	});
         my $return = undef;
 	if ($res->{AssociationId}) 
 	{
 		$self->{eip_status} = 'true';
 		$self->{eip_assoc} = $res->{AssociationId};
-		$return = $self->s3_signal($response, 'SUCCESS', undef);
+		$return = $self->s3_signal($type, $response_url, $response, 'SUCCESS', undef);
 	} 
-	else { $return = $self->s3_signal($response, 'FAILED', "associate-address failed") }
+	else { $return = $self->s3_signal($type, $response_url, $response, 'FAILED', "associate-address failed") }
 	if ($return) { return $return } else { return undef }
 }
 
@@ -139,17 +141,20 @@ sub associate
 #                       : $body - anon hash of message body
 sub message_decode 
 {
-	my ($self, $message) = @_;
-    	my $tmp = decode_json $message;
-	my $body = decode_json $tmp->{Message};
-        $self->{response_url} = $body->{ResponseURL};
+	my ($self, $message) = @_; my $attach;
+	my $tmp = decode_json $message; my $body = decode_json $tmp->{Message};
+	if ($body->{RequestType} eq 'Delete') { $attach = 'false' }
+	else { $attach = $body->{ResourceProperties}{Attach} }
+	$self->{_physical_id}++ if $body->{RequestType} =~ /Update|Delete/;
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
 		'LogicalResourceId' => $body->{LogicalResourceId},
-		'PhysicalResourceId' => 'lokerd'
+		'PhysicalResourceId' => $self->{_physical_id}
 	};
-	if ($response and $body) { return($response, $body) } else { return undef }
+	if ($body) 
+	{ return ($body->{RequestType}, $body->{ResponseURL}, $response, $attach) } 
+	else { return undef }
 }
 
 # process({})           : process stack notification
@@ -158,18 +163,16 @@ sub message_decode
 # RETURN	        : true if successful or undef
 sub process 
 {
-	my ($self, $message) = @_;
-        my ($response, $body) = $self->message_decode($message);
-        my $return = undef;
-        if ($body->{RequestType} eq 'Delete') { $body->{ResourceProperties}{Attach} = 'false' }
-	if ($body->{ResourceProperties}{Attach} eq $self->{eip_status}) 
-	{ $return = $self->s3_signal($response, 'SUCCESS', undef) } 
+	my ($self, $message) = @_; my $return = undef;
+        my ($type, $response_url, $response, $attach) = $self->message_decode($message);
+	if ($attach eq $self->{eip_status}) 
+	{ $return = $self->s3_signal($type, $response_url, $response, 'SUCCESS', undef) } 
 	else
 	{
 		if ($self->{eip_status} eq 'false') 
-		{ $return = $self->associate($response) } 
+		{ $return = $self->associate($type, $response_url, $response) } 
 		else 
-                { $return = $self->disassociate($response) }
+                { $return = $self->disassociate($type, $response_url, $response) }
 	}	
 	if ($return) { return $return } else { return undef }
 }
@@ -181,12 +184,16 @@ sub process
 # RETURN	        : true if rc 200, undef otherwise
 sub s3_signal
 {
-	my ($self, $response, $status, $reason) = @_;
-        if ($status eq 'FAILED') { $response->{Reason} = $reason }  
+	my ($self, $type, $response_url, $response, $status, $reason) = @_;
+        if ($status eq 'FAILED') 
+	{ 
+		$response->{Reason} = $reason;
+		delete $response->{PhysicalResourceId} if $type eq 'Create'; 
+	}
 	$response->{Status} = $status;
 	my $json = encode_json($response);
         debug($json) if $self->{_debug} == 1;
-	my $req = PUT $self->{response_url};
+	my $req = PUT $response_url;
 	$req->header('Content-Type' => '');
 	$req->content($json);
 	my $res = $self->{_ua}->request($req);
