@@ -153,7 +153,7 @@ sub message_decode
 	my $tmp = decode_json $message; my $body = decode_json $tmp->{Message};
 	if ($body->{RequestType} eq 'Delete') { $attach = 'false' }
 	else { $attach = $body->{ResourceProperties}{Attach} }
-	$self->{_physical_id} = &id_gen() if $body->{RequestType} =~ /Update|Delete/;
+	$self->{_physical_id} = &id_gen() if $body->{RequestType} eq 'Delete';
 	my $response = {
 		'RequestId' => $body->{RequestId},
 		'StackId' => $body->{StackId},
