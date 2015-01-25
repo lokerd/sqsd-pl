@@ -19,7 +19,7 @@ while (1)
 	# Process it if we find one
         if(@{$res->{Messages}}[0]) {
             $sqsd->process(@{$res->{Messages}}[0]->{Body});
-		    $sqsd->rm(@{$res->{Messages}}[0]->{ReceiptHandle});
+#		    $sqsd->rm(@{$res->{Messages}}[0]->{ReceiptHandle});
         }
 	# Time till we try again
 	sleep 20;

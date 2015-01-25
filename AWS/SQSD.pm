@@ -151,6 +151,10 @@ sub message_decode
 {
 	my ($self, $message) = @_; my $attach;
 	my $tmp = decode_json $message; my $body = decode_json $tmp->{Message};
+    print Dumper $tmp;
+    print "---\n";
+    print Dumper $body;
+    print "---\n";
 	if ($body->{RequestType} eq 'Delete') { $attach = 'false' }
 	else { $attach = $body->{ResourceProperties}{Attach} }
 	$self->{_physical_id} = &id_gen() if $body->{RequestType} eq 'Delete';
@@ -202,6 +206,7 @@ sub s3_signal
 	my $json = encode_json($response);
         debug($json) if $self->{_debug} == 1;
 	my $req = PUT $response_url;
+    print Dumper $req;
 	$req->header('Content-Type' => '');
 	$req->content($json);
 	my $res = $self->{_ua}->request($req);
